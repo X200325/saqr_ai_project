@@ -1,0 +1,50 @@
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import pandas as pd
+import joblib
+from pydantic import BaseModel
+from typing import List
+
+app = FastAPI()
+
+# تحميل النموذج
+model = joblib.load("trained_model.pkl")
+
+# بيانات السوق
+class MarketData(BaseModel):
+    open: float
+    high: float
+    low: float
+    close: float
+    tick_volume: int
+    spread: int
+    has_fvg: bool
+    has_ob: bool
+    has_breaker: bool
+    smt_bullish: bool
+    smt_bearish: bool
+
+# إعداد القالب Jinja2
+templates = Jinja2Templates(directory="templates")
+
+@app.get("/", response_class=HTMLResponse)
+async def read_form(request: Request):
+    # إرجاع صفحة HTML عند الدخول للجذر /
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.post("/predict")
+async def get_predictions(market_data: List[MarketData]):
+    try:
+        new_data = pd.DataFrame([data.dict() for data in market_data])
+        features = [
+            "open", "high", "low", "close", "tick_volume", "spread",
+            "has_fvg", "has_ob", "has_breaker", "smt_bullish", "smt_bearish"
+        ]
+        X = new_data[features]
+        predictions = model.predict(X)
+        result = ["صعودي" if p == 1 else "هبوطي" for p in predictions]
+        return {"التوقعات": result}
+    except Exception as e:
+        return {"error": str(e)}
